@@ -10,6 +10,10 @@ add_executable(compile
 
     src/lexer/token.c
     src/lexer/lexer.c
+
+    src/hashmap/hashmap.c
+    src/hashmap/bucket.c
+    src/hashmap/symbol.c
 )
 
 target_include_directories(compile

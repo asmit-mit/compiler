@@ -3,14 +3,26 @@
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 
-int main(int argc, char *argv[]) {
-  // if (argc != 2) {
-  //   printf("Use as ./compile <input-file-locaition>\n");
-  //   return 0;
-  // }
+#include "symbol_table/symbol.h"
 
-  // char *input_file = argv[1];
-  const char *input_file = "../src/main.c";
+int compare(const Symbol *a, const Symbol *b) {
+  return strcmp(a->lexeme, b->lexeme) == 0;
+}
+
+int getIndex(const char *lexeme, int depth) {
+  unsigned hash = 5381;
+  while (*lexeme)
+    hash = ((hash << 5) + hash) + *lexeme++;
+  return hash & ((1 << depth) - 1);
+}
+
+int main(int argc, char *argv[]) {
+  if (argc != 2) {
+    printf("Use as ./compile <input-file-locaition>\n");
+    return 0;
+  }
+
+  char *input_file = argv[1];
   FILE *fp = fopen(input_file, "r");
 
   Token *tok;
@@ -27,6 +39,6 @@ int main(int argc, char *argv[]) {
   } while (strcmp(tok->type, "EOF") != 0);
 
   fclose(fp);
-  
+
   return 0;
 }

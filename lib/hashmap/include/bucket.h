@@ -1,7 +1,7 @@
 #ifndef BUCKET_H
 #define BUCKET_H
 
-#include "hashmap/entry.h"
+#include "entry.h"
 
 typedef struct Bucket {
     int local_depth;
@@ -10,7 +10,7 @@ typedef struct Bucket {
 } Bucket;
 
 Bucket *createBucket(int local_depth);
-void insertBucket(Bucket *bucket, Symbol *symbol);
+void insertBucket(Bucket *bucket, void *data);
 void clearBucket(Bucket *bucket);
 
 #endif

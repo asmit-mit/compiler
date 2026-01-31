@@ -1,18 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hashmap/hashmap.h"
-
-static unsigned hash(const char *s) {
-  unsigned hash = 5381;
-  while (*s)
-    hash = ((hash << 5) + hash) + *s++;
-  return hash;
-}
-
-static int getIndex(const char *lexeme, int depth) {
-  return hash(lexeme) & ((1 << depth) - 1);
-}
+#include "hashmap.h"
 
 static void doubleDirectory(HashMap *map) {
   int old_size = map->dir_size;
@@ -50,16 +39,16 @@ static void splitBucket(HashMap *map, int dir_index) {
   old->size = 0;
 
   while (curr) {
-    int idx = getIndex(curr->symbol->lexeme, map->global_depth);
+    int idx = map->getIndex(curr->data, map->global_depth);
 
-    insertBucket(map->directory[idx], curr->symbol);
+    insertBucket(map->directory[idx], curr->data);
     free(curr);
 
     curr = curr->next;
   }
 }
 
-HashMap *createHashMap(int bucket_limit) {
+HashMap *createHashMap(int bucket_limit, void *getIndexFunction, void *comparator) {
   HashMap *map = malloc(sizeof(HashMap));
   if (!map)
     return NULL;
@@ -67,6 +56,8 @@ HashMap *createHashMap(int bucket_limit) {
   map->global_depth = 1;
   map->bucket_limit = bucket_limit;
   map->dir_size = 2;
+  map->getIndex = getIndexFunction;
+  map->comparator = comparator;
 
   map->directory = malloc(sizeof(Bucket *) * map->dir_size);
 
@@ -79,38 +70,38 @@ HashMap *createHashMap(int bucket_limit) {
   return map;
 }
 
-void insertHashMap(HashMap *map, Symbol *symbol) {
-  if (!map || !symbol)
+void insertHashMap(HashMap *map, void *data) {
+  if (!map || !data)
     return;
 
-  int idx = getIndex(symbol->lexeme, map->global_depth);
+  int idx = map->getIndex(data, map->global_depth);
   Bucket *b = map->directory[idx];
 
   if (b->size < map->bucket_limit) {
-    insertBucket(b, symbol);
+    insertBucket(b, data);
     return;
   }
 
   splitBucket(map, idx);
-  insertHashMap(map, symbol);
+  insertHashMap(map, data);
 }
 
-Symbol *findHashMap(HashMap *map, const char *lexeme) {
-  if (!map || !lexeme)
+void *findHashMap(HashMap *map, void *data) {
+  if (!map || !data)
     return NULL;
 
-  int idx = getIndex(lexeme, map->global_depth);
+  int idx = map->getIndex(data, map->global_depth);
   Bucket *b = map->directory[idx];
 
   for (Entry *e = b->head; e; e = e->next) {
-    if (strcmp(e->symbol->lexeme, lexeme) == 0)
-      return e->symbol;
+    if (map->comparator(e->data, data))
+      return e->data;
   }
 
   return NULL;
 }
 
-void deleteHashMap(HashMap *map) {
+void destroyHashMap(HashMap *map) {
   if (!map)
     return;
 

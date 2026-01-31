@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-#include "hashmap/bucket.h"
+#include "bucket.h"
 
 Bucket *createBucket(int local_depth) {
   Bucket *b = malloc(sizeof(Bucket));
@@ -13,15 +13,15 @@ Bucket *createBucket(int local_depth) {
   return b;
 }
 
-void insertBucket(Bucket *bucket, Symbol *symbol) {
-  if (!bucket || !symbol)
+void insertBucket(Bucket *bucket, void *data) {
+  if (!bucket || !data)
     return;
 
   Entry *e = malloc(sizeof(Entry));
   if (!e)
     return;
 
-  e->symbol = symbol;
+  e->data = data;
   e->next = bucket->head;
   bucket->head = e;
   bucket->size++;

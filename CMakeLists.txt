@@ -6,17 +6,19 @@ project(compiler C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+add_subdirectory(lib/hashmap)
+
 add_executable(compile
     src/main.c
 
     src/lexer/token.c
     src/lexer/lexer.c
 
-    src/hashmap/hashmap.c
-    src/hashmap/bucket.c
-    src/hashmap/symbol.c
+    src/symbol_table/symbol.c
 )
 
 target_include_directories(compile
     PRIVATE ${CMAKE_SOURCE_DIR}/include
 )
+
+target_link_libraries(compile PRIVATE hashmap)

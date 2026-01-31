@@ -1,9 +1,13 @@
 #include "lexer/lexer.h"
 
+static int prev_row;
+
 char nextChar(FILE *fp, int *row, int *col) {
   int c = fgetc(fp);
   if (c == EOF)
     return EOF;
+
+  prev_row = *row;
 
   if (c == '\n') {
     (*row)++;
@@ -11,15 +15,30 @@ char nextChar(FILE *fp, int *row, int *col) {
   } else {
     (*col)++;
   }
-  return (char)c;
+
+  return c;
 }
 
 char ungetChar(char c, FILE *fp, int *row, int *col) {
   if (c == EOF)
     return EOF;
+
   ungetc(c, fp);
-  if (c != '\n')
+
+  *row = prev_row;
+
+  if (c == '\n') {
+    *col = 1;
+  } else if (c == '\t') {
+    *col -= 2;
+    if (*col < 1)
+      *col = 1;
+  } else {
     (*col)--;
+    if (*col < 1)
+      *col = 1;
+  }
+
   return c;
 }
 
@@ -31,7 +50,41 @@ void skipDirective(FILE *fp, int *row, int *col) {
   }
 }
 
+// int skipComment(FILE *fp, int *row, int *col) {
+//   char c = nextChar(fp, row, col);
+//   char n = nextChar(fp, row, col);
+//
+//   if (c != '/' || (n != '/' && n != '*')) {
+//     ungetChar(n, fp, row, col);
+//     ungetChar(c, fp, row, col);
+//     return 0;
+//   }
+//
+//   if (n == '/') {
+//     while ((c = nextChar(fp, row, col)) != EOF) {
+//       if (c == '\n')
+//         break;
+//     }
+//
+//     return 1;
+//   }
+//
+//   if (n == '*') {
+//     char prev = 0;
+//     while ((c = nextChar(fp, row, col)) != EOF) {
+//       if (prev == '*' && c == '/')
+//         break;
+//       prev = c;
+//     }
+//   }
+//
+//   return 1;
+// }
+
 Token *isPunctuation(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
   char c = nextChar(fp, row, col);
   char tok[2] = {c, 0};
 
@@ -48,7 +101,7 @@ Token *isPunctuation(FILE *fp, int *row, int *col) {
   case '"':
   case '\'':
   case '\\':
-    return getToken(tok, *row, *col - 1, -1, "PUNCT");
+    return getToken(tok, start_row, start_col, -1, "PUNCT");
   default:
     ungetChar(c, fp, row, col);
     return NULL;
@@ -56,6 +109,9 @@ Token *isPunctuation(FILE *fp, int *row, int *col) {
 }
 
 Token *isIdentifier(FILE *fp, int *row, int *col, int index) {
+  int start_row = *row;
+  int start_col = *col;
+
   char buf[128];
   int len = 0;
 
@@ -74,7 +130,7 @@ Token *isIdentifier(FILE *fp, int *row, int *col, int index) {
   buf[len] = 0;
   ungetChar(c, fp, row, col);
 
-  return getToken(buf, *row, *col - len, index, "IDENTIFIER");
+  return getToken(buf, start_row, start_col, index, "IDENTIFIER");
 }
 
 Token *isKeyword(FILE *fp, int *row, int *col) {
@@ -107,6 +163,9 @@ Token *isKeyword(FILE *fp, int *row, int *col) {
 }
 
 Token *isNum(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
   char buf[128];
   int len = 0, dot = 0, exp = 0;
 
@@ -141,10 +200,13 @@ Token *isNum(FILE *fp, int *row, int *col) {
   buf[len] = 0;
   ungetChar(c, fp, row, col);
 
-  return getToken(buf, *row, *col - len, -1, "NUM");
+  return getToken(buf, start_row, start_col, -1, "NUM");
 }
 
 Token *isRelop(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
   char c = nextChar(fp, row, col);
   char n = nextChar(fp, row, col);
   char buf[3] = {0};
@@ -152,14 +214,14 @@ Token *isRelop(FILE *fp, int *row, int *col) {
   if ((c == '<' || c == '>' || c == '=' || c == '!') && n == '=') {
     buf[0] = c;
     buf[1] = '=';
-    return getToken(buf, *row, *col - 2, -1, "RELOP");
+    return getToken(buf, start_row, start_col, -1, "RELOP");
   }
 
   ungetChar(n, fp, row, col);
 
   if (c == '<' || c == '>') {
     buf[0] = c;
-    return getToken(buf, *row, *col - 1, -1, "RELOP");
+    return getToken(buf, start_row, start_col, -1, "RELOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -167,6 +229,9 @@ Token *isRelop(FILE *fp, int *row, int *col) {
 }
 
 Token *isAssignop(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
   char c = nextChar(fp, row, col);
   char n = nextChar(fp, row, col);
   char buf[3] = {0};
@@ -174,14 +239,14 @@ Token *isAssignop(FILE *fp, int *row, int *col) {
   if (n == '=' && strchr("+-*/%", c)) {
     buf[0] = c;
     buf[1] = '=';
-    return getToken(buf, *row, *col - 2, -1, "ASSIGN");
+    return getToken(buf, start_row, start_col, -1, "ASSIGN");
   }
 
   ungetChar(n, fp, row, col);
 
   if (c == '=') {
     buf[0] = '=';
-    return getToken(buf, *row, *col - 1, -1, "ASSIGN");
+    return getToken(buf, start_row, start_col, -1, "ASSIGN");
   }
 
   ungetChar(c, fp, row, col);
@@ -189,11 +254,14 @@ Token *isAssignop(FILE *fp, int *row, int *col) {
 }
 
 Token *isAddop(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
   char c = nextChar(fp, row, col);
   char buf[2] = {c, '\0'};
 
   if (c == '+' || c == '-') {
-    return getToken(buf, *row, *col - 1, -1, "ADDOP");
+    return getToken(buf, start_row, start_col, -1, "ADDOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -201,11 +269,14 @@ Token *isAddop(FILE *fp, int *row, int *col) {
 }
 
 Token *isMulop(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
   char c = nextChar(fp, row, col);
   char buf[2] = {c, '\0'};
 
   if (c == '*' || c == '/' || c == '%') {
-    return getToken(buf, *row, *col - 1, -1, "MULOP");
+    return getToken(buf, start_row, start_col, -1, "MULOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -225,6 +296,11 @@ Token *getNextToken(FILE *fp) {
       skipDirective(fp, &row, &col);
       continue;
     }
+    // if (c == '/') {
+    //   ungetChar(c, fp, &row, &col);
+    //   if (skipComment(fp, &row, &col))
+    //     continue;
+    // }
     break;
   }
 

@@ -3,16 +3,14 @@
 #include "lexer/lexer.h"
 #include "lexer/token.h"
 
-#include "hashmap/hashmap.h"
-#include "hashmap/symbol.h"
-
 int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    printf("Use as ./compile <input-file-locaition>\n");
-    return 0;
-  }
+  // if (argc != 2) {
+  //   printf("Use as ./compile <input-file-locaition>\n");
+  //   return 0;
+  // }
 
-  char *input_file = argv[1];
+  // char *input_file = argv[1];
+  const char *input_file = "../src/main.c";
   FILE *fp = fopen(input_file, "r");
 
   Token *tok;

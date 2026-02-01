@@ -1,44 +1,15 @@
 #include <stdio.h>
 
-#include "lexer/lexer.h"
-#include "lexer/token.h"
-
-#include "symbol_table/symbol.h"
-
-int compare(const Symbol *a, const Symbol *b) {
-  return strcmp(a->lexeme, b->lexeme) == 0;
-}
-
-int getIndex(const char *lexeme, int depth) {
-  unsigned hash = 5381;
-  while (*lexeme)
-    hash = ((hash << 5) + hash) + *lexeme++;
-  return hash & ((1 << depth) - 1);
-}
+#include "compiler/compiler.h"
 
 int main(int argc, char *argv[]) {
   if (argc != 2) {
-    printf("Use as ./compile <input-file-locaition>\n");
+    printf("Use as ./compile <input-file-location>\n");
     return 0;
   }
 
   char *input_file = argv[1];
-  FILE *fp = fopen(input_file, "r");
-
-  Token *tok;
-  do {
-    tok = getNextToken(fp);
-    if (tok == NULL) {
-      fprintf(stderr, "Lexer error\n");
-      break;
-    }
-
-    printf("<%s, %d, %d, %d, %s>\n", tok->token_name, tok->row, tok->col,
-           tok->index, tok->type);
-
-  } while (strcmp(tok->type, "EOF") != 0);
-
-  fclose(fp);
+  compile(input_file);
 
   return 0;
 }

@@ -6,8 +6,6 @@
 
 #include "lexer/token.h"
 
-void skipDirective(FILE *fp, int *row, int *col);
-
 char nextChar(FILE *fp, int *row, int *col);
 char ungetChar(char c, FILE *fp, int *row, int *col);
 

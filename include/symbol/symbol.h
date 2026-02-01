@@ -9,5 +9,7 @@ typedef struct Symbol {
 } Symbol;
 
 Symbol *getSymbol(char lexeme[], int size, char type[], char scope[]);
+int compareSymbol(const Symbol *a, const Symbol *b);
+int getIndex(const Symbol *sym, int depth);
 
 #endif

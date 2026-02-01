@@ -14,7 +14,11 @@ add_executable(compile
     src/lexer/token.c
     src/lexer/lexer.c
 
-    src/symbol_table/symbol.c
+    src/symbol/symbol.c
+
+    src/preprocessor/preprocessor.c
+
+    src/compiler/compiler.c
 )
 
 target_include_directories(compile

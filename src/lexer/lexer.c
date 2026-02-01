@@ -42,45 +42,6 @@ char ungetChar(char c, FILE *fp, int *row, int *col) {
   return c;
 }
 
-void skipDirective(FILE *fp, int *row, int *col) {
-  char c;
-  while ((c = nextChar(fp, row, col)) != EOF) {
-    if (c == '\n')
-      break;
-  }
-}
-
-// int skipComment(FILE *fp, int *row, int *col) {
-//   char c = nextChar(fp, row, col);
-//   char n = nextChar(fp, row, col);
-//
-//   if (c != '/' || (n != '/' && n != '*')) {
-//     ungetChar(n, fp, row, col);
-//     ungetChar(c, fp, row, col);
-//     return 0;
-//   }
-//
-//   if (n == '/') {
-//     while ((c = nextChar(fp, row, col)) != EOF) {
-//       if (c == '\n')
-//         break;
-//     }
-//
-//     return 1;
-//   }
-//
-//   if (n == '*') {
-//     char prev = 0;
-//     while ((c = nextChar(fp, row, col)) != EOF) {
-//       if (prev == '*' && c == '/')
-//         break;
-//       prev = c;
-//     }
-//   }
-//
-//   return 1;
-// }
-
 Token *isPunctuation(FILE *fp, int *row, int *col) {
   int start_row = *row;
   int start_col = *col;
@@ -140,7 +101,7 @@ Token *isKeyword(FILE *fp, int *row, int *col) {
       "float",    "for",      "goto",     "if",     "inline",  "int",
       "long",     "register", "restrict", "return", "short",   "signed",
       "sizeof",   "static",   "struct",   "switch", "typedef", "union",
-      "unsigned", "void",     "volatile", "while"};
+      "unsigned", "void",     "volatile", "while", "FILE", "size_t"};
 
   long pos = ftell(fp);
   int r = *row, c = *col;
@@ -292,15 +253,6 @@ Token *getNextToken(FILE *fp) {
   while ((c = nextChar(fp, &row, &col)) != EOF) {
     if (isspace(c))
       continue;
-    if (c == '#') {
-      skipDirective(fp, &row, &col);
-      continue;
-    }
-    // if (c == '/') {
-    //   ungetChar(c, fp, &row, &col);
-    //   if (skipComment(fp, &row, &col))
-    //     continue;
-    // }
     break;
   }
 

@@ -11,6 +11,6 @@ typedef struct Token {
   char type[100];
 } Token;
 
-Token *getToken(char token_name[], int row, int col, int index, char type[]);
+Token *token_create(char token_name[], int row, int col, int index, char type[]);
 
 #endif

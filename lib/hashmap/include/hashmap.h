@@ -13,9 +13,9 @@ typedef struct HashMap {
   int (*comparator)(const void *a, const void *b);
 } HashMap;
 
-HashMap *createHashMap(int bucket_limit, void *getIndexFunction, void *comparator);
-void insertHashMap(HashMap *map, void *data);
-void *findHashMap(HashMap *map, void *data);
-void destroyHashMap(HashMap *map);
+HashMap *hashmap_create(int bucket_limit, void *getIndexFunction, void *comparator);
+void hashmap_insert(HashMap *map, void *data);
+void *hashmap_find(HashMap *map, void *data);
+void hashmap_destroy(HashMap *map);
 
 #endif

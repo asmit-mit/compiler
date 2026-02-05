@@ -23,7 +23,7 @@ static void splitBucket(HashMap *map, int dir_index) {
     doubleDirectory(map);
   }
 
-  Bucket *new_bucket = createBucket(old->local_depth + 1);
+  Bucket *new_bucket = bucket_create(old->local_depth + 1);
   old->local_depth++;
 
   int bit = 1 << (old->local_depth - 1);
@@ -41,14 +41,14 @@ static void splitBucket(HashMap *map, int dir_index) {
   while (curr) {
     int idx = map->getIndex(curr->data, map->global_depth);
 
-    insertBucket(map->directory[idx], curr->data);
+    bucket_insert(map->directory[idx], curr->data);
     free(curr);
 
     curr = curr->next;
   }
 }
 
-HashMap *createHashMap(int bucket_limit, void *getIndexFunction, void *comparator) {
+HashMap *hashmap_create(int bucket_limit, void *getIndexFunction, void *comparator) {
   HashMap *map = malloc(sizeof(HashMap));
   if (!map)
     return NULL;
@@ -61,8 +61,8 @@ HashMap *createHashMap(int bucket_limit, void *getIndexFunction, void *comparato
 
   map->directory = malloc(sizeof(Bucket *) * map->dir_size);
 
-  Bucket *b0 = createBucket(1);
-  Bucket *b1 = createBucket(1);
+  Bucket *b0 = bucket_create(1);
+  Bucket *b1 = bucket_create(1);
 
   map->directory[0] = b0;
   map->directory[1] = b1;
@@ -70,23 +70,26 @@ HashMap *createHashMap(int bucket_limit, void *getIndexFunction, void *comparato
   return map;
 }
 
-void insertHashMap(HashMap *map, void *data) {
+void hashmap_insert(HashMap *map, void *data) {
   if (!map || !data)
+    return;
+
+  if (hashmap_find(map, data))
     return;
 
   int idx = map->getIndex(data, map->global_depth);
   Bucket *b = map->directory[idx];
 
   if (b->size < map->bucket_limit) {
-    insertBucket(b, data);
+    bucket_insert(b, data);
     return;
   }
 
   splitBucket(map, idx);
-  insertHashMap(map, data);
+  hashmap_insert(map, data);
 }
 
-void *findHashMap(HashMap *map, void *data) {
+void *hashmap_find(HashMap *map, void *data) {
   if (!map || !data)
     return NULL;
 
@@ -101,7 +104,7 @@ void *findHashMap(HashMap *map, void *data) {
   return NULL;
 }
 
-void destroyHashMap(HashMap *map) {
+void hashmap_destroy(HashMap *map) {
   if (!map)
     return;
 
@@ -117,7 +120,7 @@ void destroyHashMap(HashMap *map) {
     }
 
     if (unique) {
-      clearBucket(map->directory[i]);
+      bucket_clear(map->directory[i]);
       free(map->directory[i]);
     }
   }

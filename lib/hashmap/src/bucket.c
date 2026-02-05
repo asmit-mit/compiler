@@ -2,7 +2,7 @@
 
 #include "bucket.h"
 
-Bucket *createBucket(int local_depth) {
+Bucket *bucket_create(int local_depth) {
   Bucket *b = malloc(sizeof(Bucket));
   if (!b)
     return NULL;
@@ -13,7 +13,7 @@ Bucket *createBucket(int local_depth) {
   return b;
 }
 
-void insertBucket(Bucket *bucket, void *data) {
+void bucket_insert(Bucket *bucket, void *data) {
   if (!bucket || !data)
     return;
 
@@ -27,14 +27,17 @@ void insertBucket(Bucket *bucket, void *data) {
   bucket->size++;
 }
 
-void clearBucket(Bucket *bucket) {
+void bucket_clear(Bucket *bucket) {
   if (!bucket)
     return;
 
   Entry *curr = bucket->head;
   while (curr) {
     Entry *next = curr->next;
+
+    free(curr->data);
     free(curr);
+
     curr = next;
   }
 

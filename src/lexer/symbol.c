@@ -1,9 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "symbol/symbol.h"
+#include "lexer/symbol.h"
 
-Symbol *getSymbol(char *lexeme, int size, char *type, char *scope) {
+Symbol *symbol_create(char *lexeme, int size, char *type, char *scope) {
   Symbol *sym = malloc(sizeof(Symbol));
 
   strcpy(sym->lexeme, lexeme);
@@ -14,11 +14,11 @@ Symbol *getSymbol(char *lexeme, int size, char *type, char *scope) {
   return sym;
 }
 
-int compareSymbol(const Symbol *a, const Symbol *b) {
+int symbol_compare(const Symbol *a, const Symbol *b) {
   return strcmp(a->lexeme, b->lexeme) == 0;
 }
 
-int getIndex(const Symbol *sym, int depth) {
+int symbol_getIndex(const Symbol *sym, int depth) {
   unsigned hash = 5381;
   const char *lexeme = sym->lexeme;
   while (*lexeme)

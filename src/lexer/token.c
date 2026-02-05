@@ -1,6 +1,6 @@
 #include "lexer/token.h"
 
-Token *getToken(char token_name[], int row, int col, int index, char type[]) {
+Token *token_create(char token_name[], int row, int col, int index, char type[]) {
   Token* tk = malloc(sizeof(Token));
   tk->row = row;
   tk->col = col;

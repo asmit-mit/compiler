@@ -9,8 +9,8 @@ typedef struct Bucket {
     Entry *head;
 } Bucket;
 
-Bucket *createBucket(int local_depth);
-void insertBucket(Bucket *bucket, void *data);
-void clearBucket(Bucket *bucket);
+Bucket *bucket_create(int local_depth);
+void bucket_insert(Bucket *bucket, void *data);
+void bucket_clear(Bucket *bucket);
 
 #endif

@@ -13,8 +13,7 @@ add_executable(compile
 
     src/lexer/token.c
     src/lexer/lexer.c
-
-    src/symbol/symbol.c
+    src/lexer/symbol.c
 
     src/preprocessor/preprocessor.c
 

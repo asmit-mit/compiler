@@ -3,6 +3,6 @@
 
 #include <stdio.h>
 
-void skipCommentsDirectivesAndStrings(FILE *fp);
+void skipCommentsAndDirectives(FILE *fp);
 
 #endif

@@ -62,7 +62,7 @@ Token *isPunctuation(FILE *fp, int *row, int *col) {
   case '"':
   case '\'':
   case '\\':
-    return getToken(tok, start_row, start_col, -1, "PUNCT");
+    return token_create(tok, start_row, start_col, -1, "PUNCT");
   default:
     ungetChar(c, fp, row, col);
     return NULL;
@@ -91,7 +91,7 @@ Token *isIdentifier(FILE *fp, int *row, int *col, int index) {
   buf[len] = 0;
   ungetChar(c, fp, row, col);
 
-  return getToken(buf, start_row, start_col, index, "IDENTIFIER");
+  return token_create(buf, start_row, start_col, index, "IDENTIFIER");
 }
 
 Token *isKeyword(FILE *fp, int *row, int *col) {
@@ -101,7 +101,7 @@ Token *isKeyword(FILE *fp, int *row, int *col) {
       "float",    "for",      "goto",     "if",     "inline",  "int",
       "long",     "register", "restrict", "return", "short",   "signed",
       "sizeof",   "static",   "struct",   "switch", "typedef", "union",
-      "unsigned", "void",     "volatile", "while", "FILE", "size_t"};
+      "unsigned", "void",     "volatile", "while",  "FILE",    "size_t"};
 
   long pos = ftell(fp);
   int r = *row, c = *col;
@@ -121,6 +121,51 @@ Token *isKeyword(FILE *fp, int *row, int *col) {
   *row = r;
   *col = c;
   return NULL;
+}
+
+Token *isStringLiteral(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
+  char buf[1024];
+  int len = 0;
+
+  int c = nextChar(fp, row, col);
+
+  if (c != '"') {
+    ungetChar(c, fp, row, col);
+    return NULL;
+  }
+
+  buf[len++] = '"';
+
+  while ((c = nextChar(fp, row, col)) != EOF) {
+
+    if (len >= sizeof(buf) - 1)
+      break;
+
+    buf[len++] = c;
+
+    if (c == '\\') {
+      int next = nextChar(fp, row, col);
+      if (next == EOF)
+        break;
+
+      if (len >= sizeof(buf) - 1)
+        break;
+
+      buf[len++] = next;
+      continue;
+    }
+
+    if (c == '"') {
+      buf[len] = '\0';
+      return token_create(buf, start_row, start_col, -1, "STRING");
+    }
+  }
+
+  buf[len] = '\0';
+  return token_create(buf, start_row, start_col, -1, "BAD_STRING");
 }
 
 Token *isNum(FILE *fp, int *row, int *col) {
@@ -161,7 +206,7 @@ Token *isNum(FILE *fp, int *row, int *col) {
   buf[len] = 0;
   ungetChar(c, fp, row, col);
 
-  return getToken(buf, start_row, start_col, -1, "NUM");
+  return token_create(buf, start_row, start_col, -1, "NUM");
 }
 
 Token *isRelop(FILE *fp, int *row, int *col) {
@@ -175,14 +220,14 @@ Token *isRelop(FILE *fp, int *row, int *col) {
   if ((c == '<' || c == '>' || c == '=' || c == '!') && n == '=') {
     buf[0] = c;
     buf[1] = '=';
-    return getToken(buf, start_row, start_col, -1, "RELOP");
+    return token_create(buf, start_row, start_col, -1, "RELOP");
   }
 
   ungetChar(n, fp, row, col);
 
   if (c == '<' || c == '>') {
     buf[0] = c;
-    return getToken(buf, start_row, start_col, -1, "RELOP");
+    return token_create(buf, start_row, start_col, -1, "RELOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -200,14 +245,14 @@ Token *isAssignop(FILE *fp, int *row, int *col) {
   if (n == '=' && strchr("+-*/%", c)) {
     buf[0] = c;
     buf[1] = '=';
-    return getToken(buf, start_row, start_col, -1, "ASSIGN");
+    return token_create(buf, start_row, start_col, -1, "ASSIGN");
   }
 
   ungetChar(n, fp, row, col);
 
   if (c == '=') {
     buf[0] = '=';
-    return getToken(buf, start_row, start_col, -1, "ASSIGN");
+    return token_create(buf, start_row, start_col, -1, "ASSIGN");
   }
 
   ungetChar(c, fp, row, col);
@@ -222,7 +267,7 @@ Token *isAddop(FILE *fp, int *row, int *col) {
   char buf[2] = {c, '\0'};
 
   if (c == '+' || c == '-') {
-    return getToken(buf, start_row, start_col, -1, "ADDOP");
+    return token_create(buf, start_row, start_col, -1, "ADDOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -237,7 +282,7 @@ Token *isMulop(FILE *fp, int *row, int *col) {
   char buf[2] = {c, '\0'};
 
   if (c == '*' || c == '/' || c == '%') {
-    return getToken(buf, start_row, start_col, -1, "MULOP");
+    return token_create(buf, start_row, start_col, -1, "MULOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -257,7 +302,7 @@ Token *getNextToken(FILE *fp) {
   }
 
   if (c == EOF)
-    return getToken("EOF", row, col, -1, "EOF");
+    return token_create("EOF", row, col, -1, "EOF");
 
   ungetChar(c, fp, &row, &col);
 
@@ -266,6 +311,8 @@ Token *getNextToken(FILE *fp) {
     return tok;
   if ((tok = isIdentifier(fp, &row, &col, index)))
     return index++, tok;
+  if ((tok = isStringLiteral(fp, &row, &col)))
+    return tok;
   if ((tok = isNum(fp, &row, &col)))
     return tok;
   if ((tok = isRelop(fp, &row, &col)))
@@ -281,5 +328,5 @@ Token *getNextToken(FILE *fp) {
 
   c = nextChar(fp, &row, &col);
   char unk[2] = {c, '\0'};
-  return getToken(unk, row, col - 1, -1, "UNKNOWN");
+  return token_create(unk, row, col - 1, -1, "UNKNOWN");
 }

@@ -3,12 +3,8 @@
 #include <ctype.h>
 #include <stdio.h>
 
-void skipCommentsDirectivesAndStrings(FILE *fp) {
+void skipCommentsAndDirectives(FILE *fp) {
   FILE *out = fopen("temp.c", "w");
-  if (!out) {
-    perror("temp.c");
-    return;
-  }
 
   int c, next;
   int in_string = 0, in_char = 0;
@@ -16,7 +12,47 @@ void skipCommentsDirectivesAndStrings(FILE *fp) {
 
   while ((c = fgetc(fp)) != EOF) {
 
-    if (start_of_line) {
+    if (!in_char && c == '"' && !in_string) {
+      in_string = 1;
+      fputc(c, out);
+      continue;
+    } else if (in_string) {
+      fputc(c, out);
+
+      if (c == '\\') {
+        int esc = fgetc(fp);
+        if (esc != EOF)
+          fputc(esc, out);
+        continue;
+      }
+
+      if (c == '"')
+        in_string = 0;
+
+      continue;
+    }
+
+    if (!in_string && c == '\'' && !in_char) {
+      in_char = 1;
+      fputc(c, out);
+      continue;
+    } else if (in_char) {
+      fputc(c, out);
+
+      if (c == '\\') {
+        int esc = fgetc(fp);
+        if (esc != EOF)
+          fputc(esc, out);
+        continue;
+      }
+
+      if (c == '\'')
+        in_char = 0;
+
+      continue;
+    }
+
+    if (!in_string && !in_char && start_of_line) {
       int temp = c;
 
       while (isspace(temp) && temp != '\n') {
@@ -25,14 +61,9 @@ void skipCommentsDirectivesAndStrings(FILE *fp) {
       }
 
       if (temp == '#') {
-        fputc(' ', out);
-        while ((c = fgetc(fp)) != EOF) {
-          if (c == '\n') {
-            fputc('\n', out);
-            break;
-          }
-          fputc(' ', out);
-        }
+        while ((c = fgetc(fp)) != EOF && c != '\n')
+          ;
+        fputc('\n', out);
         start_of_line = 1;
         continue;
       }
@@ -42,84 +73,23 @@ void skipCommentsDirectivesAndStrings(FILE *fp) {
       start_of_line = 0;
     }
 
-    if (c == '"' && !in_char) {
-      in_string = 1;
-      fputc('"', out);
-
-      while ((c = fgetc(fp)) != EOF) {
-        if (c == '\\') {
-          fputc(' ', out);
-          fputc(' ', out);
-          fgetc(fp);
-          continue;
-        }
-        if (c == '"') {
-          fputc('"', out);
-          in_string = 0;
-          break;
-        }
-        if (c == '\n')
-          fputc('\n', out);
-        else
-          fputc(' ', out);
-      }
-      continue;
-    }
-
-    if (c == '\'' && !in_string) {
-      in_char = 1;
-      fputc('\'', out);
-
-      while ((c = fgetc(fp)) != EOF) {
-        if (c == '\\') {
-          fputc(' ', out);
-          fputc(' ', out);
-          fgetc(fp);
-          continue;
-        }
-        if (c == '\'') {
-          fputc('\'', out);
-          in_char = 0;
-          break;
-        }
-        if (c == '\n')
-          fputc('\n', out);
-        else
-          fputc(' ', out);
-      }
-      continue;
-    }
-
     if (!in_string && !in_char && c == '/') {
       next = fgetc(fp);
 
       if (next == '/') {
-        fputc(' ', out);
-        fputc(' ', out);
-        while ((c = fgetc(fp)) != EOF) {
-          if (c == '\n') {
-            fputc('\n', out);
-            break;
-          }
-          fputc(' ', out);
-        }
+        while ((c = fgetc(fp)) != EOF && c != '\n')
+          ;
+        fputc('\n', out);
         start_of_line = 1;
         continue;
       }
 
       if (next == '*') {
-        fputc(' ', out);
-        fputc(' ', out);
+        int prev = 0;
         while ((c = fgetc(fp)) != EOF) {
-          if (c == '*' && (next = fgetc(fp)) == '/') {
-            fputc(' ', out);
-            fputc(' ', out);
+          if (prev == '*' && c == '/')
             break;
-          }
-          if (c == '\n')
-            fputc('\n', out);
-          else
-            fputc(' ', out);
+          prev = c;
         }
         continue;
       }
@@ -129,8 +99,7 @@ void skipCommentsDirectivesAndStrings(FILE *fp) {
 
     fputc(c, out);
 
-    if (c == '\n')
-      start_of_line = 1;
+    start_of_line = (c == '\n');
   }
 
   fclose(out);

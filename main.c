@@ -3,7 +3,196 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hashmap.c"
+typedef struct Entry {
+  void *data;
+  struct Entry *next;
+} Entry;
+
+typedef struct Bucket {
+  int local_depth;
+  int size;
+  struct Entry *head;
+} Bucket;
+
+typedef struct HashMap {
+  int global_depth;
+  int bucket_limit;
+  int dir_size;
+  Bucket **directory;
+
+  int (*getIndex)(const void *data, int depth);
+  int (*comparator)(const void *a, const void *b);
+} HashMap;
+
+Bucket *bucket_create(int local_depth) {
+  Bucket *b = malloc(sizeof(Bucket));
+  if (!b)
+    return NULL;
+
+  b->local_depth = local_depth;
+  b->size = 0;
+  b->head = NULL;
+  return b;
+}
+
+void bucket_insert(Bucket *bucket, void *data) {
+  if (!bucket || !data)
+    return;
+
+  Entry *e = malloc(sizeof(Entry));
+  if (!e)
+    return;
+
+  e->data = data;
+  e->next = bucket->head;
+  bucket->head = e;
+  bucket->size++;
+}
+
+void bucket_clear(Bucket *bucket) {
+  if (!bucket)
+    return;
+
+  Entry *curr = bucket->head;
+  while (curr) {
+    Entry *next = curr->next;
+
+    free(curr->data);
+    free(curr);
+
+    curr = next;
+  }
+
+  bucket->head = NULL;
+  bucket->size = 0;
+}
+
+static void doubleDirectory(HashMap *map) {
+  int old_size = map->dir_size;
+
+  map->dir_size *= 2;
+  map->global_depth++;
+
+  map->directory = realloc(map->directory, sizeof(Bucket *) * map->dir_size);
+
+  for (int i = 0; i < old_size; i++) {
+    map->directory[i + old_size] = map->directory[i];
+  }
+}
+
+static void splitBucket(HashMap *map, int dir_index) {
+  Bucket *old = map->directory[dir_index];
+
+  if (old->local_depth == map->global_depth) {
+    doubleDirectory(map);
+  }
+
+  Bucket *new_bucket = bucket_create(old->local_depth + 1);
+  old->local_depth++;
+
+  int bit = 1 << (old->local_depth - 1);
+
+  for (int i = 0; i < map->dir_size; i++) {
+    if (map->directory[i] == old && (i & bit)) {
+      map->directory[i] = new_bucket;
+    }
+  }
+
+  Entry *curr = old->head;
+  old->head = NULL;
+  old->size = 0;
+
+  while (curr) {
+    int idx = map->getIndex(curr->data, map->global_depth);
+
+    bucket_insert(map->directory[idx], curr->data);
+    free(curr);
+
+    curr = curr->next;
+  }
+}
+
+HashMap *hashmap_create(int bucket_limit, void *getIndexFunction,
+                        void *comparator) {
+  HashMap *map = malloc(sizeof(HashMap));
+  if (!map)
+    return NULL;
+
+  map->global_depth = 1;
+  map->bucket_limit = bucket_limit;
+  map->dir_size = 2;
+  map->getIndex = getIndexFunction;
+  map->comparator = comparator;
+
+  map->directory = malloc(sizeof(Bucket *) * map->dir_size);
+
+  Bucket *b0 = bucket_create(1);
+  Bucket *b1 = bucket_create(1);
+
+  map->directory[0] = b0;
+  map->directory[1] = b1;
+
+  return map;
+}
+
+void *hashmap_find(HashMap *map, void *data) {
+  if (!map || !data)
+    return NULL;
+
+  int idx = map->getIndex(data, map->global_depth);
+  Bucket *b = map->directory[idx];
+
+  for (Entry *e = b->head; e; e = e->next) {
+    if (map->comparator(e->data, data))
+      return e->data;
+  }
+
+  return NULL;
+}
+
+void hashmap_insert(HashMap *map, void *data) {
+  if (!map || !data)
+    return;
+
+  if (hashmap_find(map, data))
+    return;
+
+  int idx = map->getIndex(data, map->global_depth);
+  Bucket *b = map->directory[idx];
+
+  if (b->size < map->bucket_limit) {
+    bucket_insert(b, data);
+    return;
+  }
+
+  splitBucket(map, idx);
+  hashmap_insert(map, data);
+}
+
+void hashmap_destroy(HashMap *map) {
+  if (!map)
+    return;
+
+  int size = map->dir_size;
+
+  for (int i = 0; i < size; i++) {
+    int unique = 1;
+    for (int j = 0; j < i; j++) {
+      if (map->directory[i] == map->directory[j]) {
+        unique = 0;
+        break;
+      }
+    }
+
+    if (unique) {
+      bucket_clear(map->directory[i]);
+      free(map->directory[i]);
+    }
+  }
+
+  free(map->directory);
+  free(map);
+}
 
 typedef struct Token {
   char token_name[100];
@@ -13,14 +202,15 @@ typedef struct Token {
 } Token;
 
 typedef struct Symbol {
-    char lexeme[20];
-    int size;
-    char type[20];
-    char scope[20];
+  char lexeme[20];
+  int size;
+  char type[20];
+  char scope[20];
 } Symbol;
 
-Token *getToken(char token_name[], int row, int col, int index, char type[]) {
-  Token* tk = malloc(sizeof(Token));
+Token *token_create(char token_name[], int row, int col, int index,
+                    char type[]) {
+  Token *tk = malloc(sizeof(Token));
   tk->row = row;
   tk->col = col;
   tk->index = index;
@@ -29,7 +219,7 @@ Token *getToken(char token_name[], int row, int col, int index, char type[]) {
   return tk;
 }
 
-Symbol *getSymbol(char *lexeme, int size, char *type, char *scope) {
+Symbol *symbol_create(char *lexeme, int size, char *type, char *scope) {
   Symbol *sym = malloc(sizeof(Symbol));
 
   strcpy(sym->lexeme, lexeme);
@@ -40,149 +230,16 @@ Symbol *getSymbol(char *lexeme, int size, char *type, char *scope) {
   return sym;
 }
 
-int compareSymbol(const Symbol *a, const Symbol *b) {
+int symbol_compare(const Symbol *a, const Symbol *b) {
   return strcmp(a->lexeme, b->lexeme) == 0;
 }
 
-int getIndex(const Symbol *sym, int depth) {
+int symbol_getIndex(const Symbol *sym, int depth) {
   unsigned hash = 5381;
   const char *lexeme = sym->lexeme;
   while (*lexeme)
     hash = ((hash << 5) + hash) + *lexeme++;
   return hash & ((1 << depth) - 1);
-}
-
-void skipCommentsDirectivesAndStrings(FILE *fp) {
-  FILE *out = fopen("temp.c", "w");
-  if (!out) {
-    perror("temp.c");
-    return;
-  }
-
-  int c, next;
-  int in_string = 0, in_char = 0;
-  int start_of_line = 1;
-
-  while ((c = fgetc(fp)) != EOF) {
-
-    if (start_of_line) {
-      int temp = c;
-
-      while (isspace(temp) && temp != '\n') {
-        fputc(temp, out);
-        temp = fgetc(fp);
-      }
-
-      if (temp == '#') {
-        fputc(' ', out);
-        while ((c = fgetc(fp)) != EOF) {
-          if (c == '\n') {
-            fputc('\n', out);
-            break;
-          }
-          fputc(' ', out);
-        }
-        start_of_line = 1;
-        continue;
-      }
-
-      ungetc(temp, fp);
-      c = fgetc(fp);
-      start_of_line = 0;
-    }
-
-    if (c == '"' && !in_char) {
-      in_string = 1;
-      fputc('"', out);
-
-      while ((c = fgetc(fp)) != EOF) {
-        if (c == '\\') {
-          fputc(' ', out);
-          fputc(' ', out);
-          fgetc(fp);
-          continue;
-        }
-        if (c == '"') {
-          fputc('"', out);
-          in_string = 0;
-          break;
-        }
-        if (c == '\n')
-          fputc('\n', out);
-        else
-          fputc(' ', out);
-      }
-      continue;
-    }
-
-    if (c == '\'' && !in_string) {
-      in_char = 1;
-      fputc('\'', out);
-
-      while ((c = fgetc(fp)) != EOF) {
-        if (c == '\\') {
-          fputc(' ', out);
-          fputc(' ', out);
-          fgetc(fp);
-          continue;
-        }
-        if (c == '\'') {
-          fputc('\'', out);
-          in_char = 0;
-          break;
-        }
-        if (c == '\n')
-          fputc('\n', out);
-        else
-          fputc(' ', out);
-      }
-      continue;
-    }
-
-    if (!in_string && !in_char && c == '/') {
-      next = fgetc(fp);
-
-      if (next == '/') {
-        fputc(' ', out);
-        fputc(' ', out);
-        while ((c = fgetc(fp)) != EOF) {
-          if (c == '\n') {
-            fputc('\n', out);
-            break;
-          }
-          fputc(' ', out);
-        }
-        start_of_line = 1;
-        continue;
-      }
-
-      if (next == '*') {
-        fputc(' ', out);
-        fputc(' ', out);
-        while ((c = fgetc(fp)) != EOF) {
-          if (c == '*' && (next = fgetc(fp)) == '/') {
-            fputc(' ', out);
-            fputc(' ', out);
-            break;
-          }
-          if (c == '\n')
-            fputc('\n', out);
-          else
-            fputc(' ', out);
-        }
-        continue;
-      }
-
-      ungetc(next, fp);
-    }
-
-    fputc(c, out);
-
-    if (c == '\n')
-      start_of_line = 1;
-  }
-
-  fclose(out);
 }
 
 static int prev_row;
@@ -247,7 +304,7 @@ Token *isPunctuation(FILE *fp, int *row, int *col) {
   case '"':
   case '\'':
   case '\\':
-    return getToken(tok, start_row, start_col, -1, "PUNCT");
+    return token_create(tok, start_row, start_col, -1, "PUNCT");
   default:
     ungetChar(c, fp, row, col);
     return NULL;
@@ -276,7 +333,7 @@ Token *isIdentifier(FILE *fp, int *row, int *col, int index) {
   buf[len] = 0;
   ungetChar(c, fp, row, col);
 
-  return getToken(buf, start_row, start_col, index, "IDENTIFIER");
+  return token_create(buf, start_row, start_col, index, "IDENTIFIER");
 }
 
 Token *isKeyword(FILE *fp, int *row, int *col) {
@@ -286,7 +343,7 @@ Token *isKeyword(FILE *fp, int *row, int *col) {
       "float",    "for",      "goto",     "if",     "inline",  "int",
       "long",     "register", "restrict", "return", "short",   "signed",
       "sizeof",   "static",   "struct",   "switch", "typedef", "union",
-      "unsigned", "void",     "volatile", "while", "FILE", "size_t"};
+      "unsigned", "void",     "volatile", "while",  "FILE",    "size_t"};
 
   long pos = ftell(fp);
   int r = *row, c = *col;
@@ -306,6 +363,51 @@ Token *isKeyword(FILE *fp, int *row, int *col) {
   *row = r;
   *col = c;
   return NULL;
+}
+
+Token *isStringLiteral(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
+  char buf[1024];
+  int len = 0;
+
+  int c = nextChar(fp, row, col);
+
+  if (c != '"') {
+    ungetChar(c, fp, row, col);
+    return NULL;
+  }
+
+  buf[len++] = '"';
+
+  while ((c = nextChar(fp, row, col)) != EOF) {
+
+    if (len >= sizeof(buf) - 1)
+      break;
+
+    buf[len++] = c;
+
+    if (c == '\\') {
+      int next = nextChar(fp, row, col);
+      if (next == EOF)
+        break;
+
+      if (len >= sizeof(buf) - 1)
+        break;
+
+      buf[len++] = next;
+      continue;
+    }
+
+    if (c == '"') {
+      buf[len] = '\0';
+      return token_create(buf, start_row, start_col, -1, "STRING");
+    }
+  }
+
+  buf[len] = '\0';
+  return token_create(buf, start_row, start_col, -1, "BAD_STRING");
 }
 
 Token *isNum(FILE *fp, int *row, int *col) {
@@ -346,7 +448,7 @@ Token *isNum(FILE *fp, int *row, int *col) {
   buf[len] = 0;
   ungetChar(c, fp, row, col);
 
-  return getToken(buf, start_row, start_col, -1, "NUM");
+  return token_create(buf, start_row, start_col, -1, "NUM");
 }
 
 Token *isRelop(FILE *fp, int *row, int *col) {
@@ -360,14 +462,14 @@ Token *isRelop(FILE *fp, int *row, int *col) {
   if ((c == '<' || c == '>' || c == '=' || c == '!') && n == '=') {
     buf[0] = c;
     buf[1] = '=';
-    return getToken(buf, start_row, start_col, -1, "RELOP");
+    return token_create(buf, start_row, start_col, -1, "RELOP");
   }
 
   ungetChar(n, fp, row, col);
 
   if (c == '<' || c == '>') {
     buf[0] = c;
-    return getToken(buf, start_row, start_col, -1, "RELOP");
+    return token_create(buf, start_row, start_col, -1, "RELOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -385,14 +487,14 @@ Token *isAssignop(FILE *fp, int *row, int *col) {
   if (n == '=' && strchr("+-*/%", c)) {
     buf[0] = c;
     buf[1] = '=';
-    return getToken(buf, start_row, start_col, -1, "ASSIGN");
+    return token_create(buf, start_row, start_col, -1, "ASSIGN");
   }
 
   ungetChar(n, fp, row, col);
 
   if (c == '=') {
     buf[0] = '=';
-    return getToken(buf, start_row, start_col, -1, "ASSIGN");
+    return token_create(buf, start_row, start_col, -1, "ASSIGN");
   }
 
   ungetChar(c, fp, row, col);
@@ -407,7 +509,7 @@ Token *isAddop(FILE *fp, int *row, int *col) {
   char buf[2] = {c, '\0'};
 
   if (c == '+' || c == '-') {
-    return getToken(buf, start_row, start_col, -1, "ADDOP");
+    return token_create(buf, start_row, start_col, -1, "ADDOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -422,7 +524,7 @@ Token *isMulop(FILE *fp, int *row, int *col) {
   char buf[2] = {c, '\0'};
 
   if (c == '*' || c == '/' || c == '%') {
-    return getToken(buf, start_row, start_col, -1, "MULOP");
+    return token_create(buf, start_row, start_col, -1, "MULOP");
   }
 
   ungetChar(c, fp, row, col);
@@ -442,7 +544,7 @@ Token *getNextToken(FILE *fp) {
   }
 
   if (c == EOF)
-    return getToken("EOF", row, col, -1, "EOF");
+    return token_create("EOF", row, col, -1, "EOF");
 
   ungetChar(c, fp, &row, &col);
 
@@ -451,6 +553,8 @@ Token *getNextToken(FILE *fp) {
     return tok;
   if ((tok = isIdentifier(fp, &row, &col, index)))
     return index++, tok;
+  if ((tok = isStringLiteral(fp, &row, &col)))
+    return tok;
   if ((tok = isNum(fp, &row, &col)))
     return tok;
   if ((tok = isRelop(fp, &row, &col)))
@@ -466,53 +570,112 @@ Token *getNextToken(FILE *fp) {
 
   c = nextChar(fp, &row, &col);
   char unk[2] = {c, '\0'};
-  return getToken(unk, row, col - 1, -1, "UNKNOWN");
+  return token_create(unk, row, col - 1, -1, "UNKNOWN");
 }
 
-typedef struct {
-  char *name;
-  char *ret_type;
-  int size;
-} BuiltinFunc;
+void skipCommentsAndDirectives(FILE *fp) {
+  FILE *out = fopen("temp.c", "w");
 
-static BuiltinFunc builtin_funcs[] = {
-    {"printf", "int", 4},   {"scanf", "int", 4},     {"malloc", "void*", 8},
-    {"free", "void", 0},    {"strlen", "size_t", 8}, {"strcmp", "int", 4},
-    {"strcpy", "char*", 8}, {"exit", "void", 0},     {"fopen", "FILE*", 8},
-    {"fclose", "int", 4},   {"main", "int", 4},      {"compile", "void", 0}};
+  int c, next;
+  int in_string = 0, in_char = 0;
+  int start_of_line = 1;
 
-static const int builtin_count =
-    sizeof(builtin_funcs) / sizeof(builtin_funcs[0]);
+  while ((c = fgetc(fp)) != EOF) {
 
-static BuiltinFunc *findBuiltin(const char *name) {
-  for (int i = 0; i < builtin_count; i++) {
-    if (strcmp(builtin_funcs[i].name, name) == 0)
-      return &builtin_funcs[i];
+    if (!in_char && c == '"' && !in_string) {
+      in_string = 1;
+      fputc(c, out);
+      continue;
+    } else if (in_string) {
+      fputc(c, out);
+
+      if (c == '\\') {
+        int esc = fgetc(fp);
+        if (esc != EOF)
+          fputc(esc, out);
+        continue;
+      }
+
+      if (c == '"')
+        in_string = 0;
+
+      continue;
+    }
+
+    if (!in_string && c == '\'' && !in_char) {
+      in_char = 1;
+      fputc(c, out);
+      continue;
+    } else if (in_char) {
+      fputc(c, out);
+
+      if (c == '\\') {
+        int esc = fgetc(fp);
+        if (esc != EOF)
+          fputc(esc, out);
+        continue;
+      }
+
+      if (c == '\'')
+        in_char = 0;
+
+      continue;
+    }
+
+    if (!in_string && !in_char && start_of_line) {
+      int temp = c;
+
+      while (isspace(temp) && temp != '\n') {
+        fputc(temp, out);
+        temp = fgetc(fp);
+      }
+
+      if (temp == '#') {
+        while ((c = fgetc(fp)) != EOF && c != '\n')
+          ;
+        fputc('\n', out);
+        start_of_line = 1;
+        continue;
+      }
+
+      ungetc(temp, fp);
+      c = fgetc(fp);
+      start_of_line = 0;
+    }
+
+    if (!in_string && !in_char && c == '/') {
+      next = fgetc(fp);
+
+      if (next == '/') {
+        while ((c = fgetc(fp)) != EOF && c != '\n')
+          ;
+        fputc('\n', out);
+        start_of_line = 1;
+        continue;
+      }
+
+      if (next == '*') {
+        int prev = 0;
+        while ((c = fgetc(fp)) != EOF) {
+          if (prev == '*' && c == '/')
+            break;
+          prev = c;
+        }
+        continue;
+      }
+
+      ungetc(next, fp);
+    }
+
+    fputc(c, out);
+
+    start_of_line = (c == '\n');
   }
-  return NULL;
+
+  fclose(out);
 }
 
-typedef struct {
-  char *type;
-  int size;
-} PrimitiveType;
-
-static PrimitiveType primitive_types[] = {
-    {"char", 1},  {"int", 4},  {"float", 4},  {"double", 8},  {"void", 0},
-    {"char*", 8}, {"int*", 8}, {"float*", 8}, {"double*", 8}, {"void*", 8}};
-
-static const int primitive_count =
-    sizeof(primitive_types) / sizeof(primitive_types[0]);
-
-static int getPrimitiveSize(const char *type) {
-  for (int i = 0; i < primitive_count; i++) {
-    if (strcmp(primitive_types[i].type, type) == 0)
-      return primitive_types[i].size;
-  }
-  return -1; /* not a primitive */
-}
-
-void displayHashMap(HashMap *map) {
+static void displayHashMap(HashMap *map) {
   if (!map)
     return;
 
@@ -534,64 +697,116 @@ void displayHashMap(HashMap *map) {
 
     for (Entry *e = b->head; e; e = e->next) {
       Symbol *s = (Symbol *)e->data;
-      printf("lexeme: %-12s | size: %d | type: %s, | rtype: %s\n", s->lexeme,
-             s->size, s->type, s->scope);
+      printf("hash: %-4d | lexeme: %-15s | size: %-4d | type: %-12s | scope: "
+             "%-8s\n",
+             i, s->lexeme, s->size, s->type, s->scope);
     }
   }
 
   printf("\n====================\n");
 }
 
+static int isTypeKeyword(const char *s) {
+  static const char *types[] = {"int",  "void",  "char",   "double",  "float",
+                                "long", "short", "signed", "unsigned"};
+  static const int sizes[] = {sizeof(int),     0,
+                              sizeof(char),    sizeof(double),
+                              sizeof(float),   sizeof(long),
+                              sizeof(short),   sizeof(int),
+                              sizeof(unsigned)};
+
+  for (int i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
+    if (strcmp(s, types[i]) == 0)
+      return sizes[i];
+  }
+
+  return -1;
+}
+
+static int isBuiltin(const char *s) {
+  static const char *funcs[] = {"printf", "scanf",  "fopen",  "fclose",
+                                "malloc", "calloc", "strlen", "strcpy"};
+
+  for (int i = 0; i < sizeof(funcs) / sizeof(funcs[0]); i++) {
+    if (strcmp(s, funcs[i]) == 0)
+      return 1;
+  }
+
+  return 0;
+}
+
 void compile(const char *input_file) {
+
   FILE *fp = fopen(input_file, "r");
-  skipCommentsDirectivesAndStrings(fp);
+  skipCommentsAndDirectives(fp);
   fclose(fp);
 
   FILE *temp_fp = fopen("temp.c", "r");
 
-  HashMap *map = createHashMap(3, getIndex, compareSymbol);
+  HashMap *map = hashmap_create(3, symbol_getIndex, symbol_compare);
 
-  Token *tok, *prev_tok;
-  do {
-    if (tok && strcmp(tok->type, "KEYWORD") == 0)
-      prev_tok = tok;
-    tok = getNextToken(temp_fp);
-    if (tok == NULL) {
-      fprintf(stderr, "Lexer error\n");
-      break;
-    }
+  Token *prev = NULL;
+  Token *curr = getNextToken(temp_fp);
 
-    printf("<%s, %d, %d, %d, %s>\n", tok->token_name, tok->row, tok->col,
-           tok->index, tok->type);
+  char last_type[64] = "";
+  int last_type_row = -1;
 
-    if (strcmp(tok->type, "IDENTIFIER") == 0) {
+  while (curr && strcmp(curr->type, "EOF") != 0) {
+    printf("<%s, %d, %d, %d, %s>\n", curr->token_name, curr->row, curr->col,
+           curr->index, curr->type);
 
-      BuiltinFunc *bf = findBuiltin(tok->token_name);
+    if (strcmp(curr->type, "KEYWORD") == 0 &&
+        isTypeKeyword(curr->token_name) != -1) {
+      strcpy(last_type, curr->token_name);
+      last_type_row = curr->row;
+    } else if (strcmp(curr->type, "IDENTIFIER") == 0) {
+      Token *peek = getNextToken(temp_fp);
+      int is_function = 0;
 
-      if (bf) {
-        insertHashMap(map, getSymbol(bf->name, bf->size, "func", bf->ret_type));
-      } else {
-        char *decl_type = "void";
-        int size = 0;
+      if (peek && strcmp(peek->type, "PUNCT") == 0 &&
+          peek->token_name[0] == '(')
+        is_function = 1;
 
-        if (prev_tok) {
-          int prim_size = getPrimitiveSize(prev_tok->token_name);
-          if (prim_size >= 0) {
-            decl_type = prev_tok->token_name;
-            size = prim_size;
-          }
+      if (curr->row == last_type_row) {
+        if (is_function) {
+          hashmap_insert(map, symbol_create(curr->token_name,
+                                            isTypeKeyword(last_type),
+                                            "function", "global"));
+
+          prev = peek;
+          curr = getNextToken(temp_fp);
+          continue;
         }
 
-        insertHashMap(map, getSymbol(tok->token_name, size, decl_type, ""));
+        hashmap_insert(map,
+                       symbol_create(curr->token_name, isTypeKeyword(last_type),
+                                     last_type, "global"));
+      } else if (is_function) {
+        hashmap_insert(
+            map, symbol_create(curr->token_name, -1, "function", "global"));
+
+        prev = peek;
+        curr = getNextToken(temp_fp);
+        continue;
+      } else if (isBuiltin(curr->token_name)) {
+        hashmap_insert(
+            map, symbol_create(curr->token_name, -1, "function", "global"));
       }
     }
 
-  } while (strcmp(tok->type, "EOF") != 0);
+    if (strcmp(curr->type, "PUNCT") == 0 && curr->token_name[0] == ';') {
+      last_type[0] = 0;
+      last_type_row = -1;
+    }
+
+    prev = curr;
+    curr = getNextToken(temp_fp);
+  }
 
   displayHashMap(map);
-  destroyHashMap(map);
 
   fclose(temp_fp);
+  hashmap_destroy(map);
 }
 
 int main(int argc, char *argv[]) {

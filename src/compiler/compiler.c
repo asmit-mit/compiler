@@ -31,8 +31,9 @@ static void displayHashMap(HashMap *map) {
 
     for (Entry *e = b->head; e; e = e->next) {
       Symbol *s = (Symbol *)e->data;
-      printf("lexeme: %-15s | size: %-4d | type: %-12s | scope: %-8s\n",
-             s->lexeme, s->size, s->type, s->scope);
+      printf("hash: %-4d | lexeme: %-15s | size: %-4d | type: %-12s | scope: "
+             "%-8s\n",
+             i, s->lexeme, s->size, s->type, s->scope);
     }
   }
 
@@ -76,7 +77,7 @@ void compile(const char *input_file) {
 
   FILE *temp_fp = fopen("temp.c", "r");
 
-  HashMap *map = hashmap_create(5, symbol_getIndex, symbol_compare);
+  HashMap *map = hashmap_create(3, symbol_getIndex, symbol_compare);
 
   Token *prev = NULL;
   Token *curr = getNextToken(temp_fp);
@@ -93,14 +94,18 @@ void compile(const char *input_file) {
       strcpy(last_type, curr->token_name);
       last_type_row = curr->row;
     } else if (strcmp(curr->type, "IDENTIFIER") == 0) {
+      Token *peek = getNextToken(temp_fp);
+      int is_function = 0;
+
+      if (peek && strcmp(peek->type, "PUNCT") == 0 &&
+          peek->token_name[0] == '(')
+        is_function = 1;
+
       if (curr->row == last_type_row) {
-        Token *peek = getNextToken(temp_fp);
-
-        if (peek && strcmp(peek->type, "PUNCT") == 0 &&
-            peek->token_name[0] == '(') {
-
-          hashmap_insert(
-              map, symbol_create(curr->token_name, -1, "function", "global"));
+        if (is_function) {
+          hashmap_insert(map, symbol_create(curr->token_name,
+                                            isTypeKeyword(last_type),
+                                            "function", "global"));
 
           prev = peek;
           curr = getNextToken(temp_fp);
@@ -110,9 +115,16 @@ void compile(const char *input_file) {
         hashmap_insert(map,
                        symbol_create(curr->token_name, isTypeKeyword(last_type),
                                      last_type, "global"));
+      } else if (is_function) {
+        hashmap_insert(
+            map, symbol_create(curr->token_name, -1, "function", "global"));
+
+        prev = peek;
+        curr = getNextToken(temp_fp);
+        continue;
       } else if (isBuiltin(curr->token_name)) {
         hashmap_insert(
-            map, symbol_create(curr->token_name, -1, "builtin", "global"));
+            map, symbol_create(curr->token_name, -1, "function", "global"));
       }
     }
 

@@ -39,12 +39,13 @@ static void splitBucket(HashMap *map, int dir_index) {
   old->size = 0;
 
   while (curr) {
+    Entry *next = curr->next;
     int idx = map->getIndex(curr->data, map->global_depth);
 
     bucket_insert(map->directory[idx], curr->data);
     free(curr);
 
-    curr = curr->next;
+    curr = next;
   }
 }
 

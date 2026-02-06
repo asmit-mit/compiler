@@ -86,9 +86,24 @@ void skipCommentsAndDirectives(FILE *fp) {
 
       if (next == '*') {
         int prev = 0;
+
+        fputc(' ', out);
+        fputc(' ', out);
+
         while ((c = fgetc(fp)) != EOF) {
+
+          if (c == '\n') {
+            fputc('\n', out);
+            start_of_line = 1;
+            prev = 0;
+            continue;
+          }
+
+          fputc(' ', out);
+
           if (prev == '*' && c == '/')
             break;
+
           prev = c;
         }
         continue;
@@ -98,7 +113,6 @@ void skipCommentsAndDirectives(FILE *fp) {
     }
 
     fputc(c, out);
-
     start_of_line = (c == '\n');
   }
 

@@ -40,6 +40,11 @@ static void displayHashMap(HashMap *map) {
   printf("\n====================\n");
 }
 
+static void displayToken(Token *tok) {
+  printf("<%s, %d, %d, %d, %s>\n", tok->token_name, tok->row, tok->col,
+         tok->index, tok->type);
+}
+
 static int isTypeKeyword(const char *s) {
   static const char *types[] = {"int",  "void",  "char",   "double",  "float",
                                 "long", "short", "signed", "unsigned"};
@@ -58,8 +63,9 @@ static int isTypeKeyword(const char *s) {
 }
 
 static int isBuiltin(const char *s) {
-  static const char *funcs[] = {"printf", "scanf",  "fopen",  "fclose",
-                                "malloc", "calloc", "strlen", "strcpy"};
+  static const char *funcs[] = {"printf", "scanf",  "fopen",
+                                "fclose", "malloc", "calloc",
+                                "strlen", "strcpy", "strcmp"};
 
   for (int i = 0; i < sizeof(funcs) / sizeof(funcs[0]); i++) {
     if (strcmp(s, funcs[i]) == 0)
@@ -86,8 +92,7 @@ void compile(const char *input_file) {
   int last_type_row = -1;
 
   while (curr && strcmp(curr->type, "EOF") != 0) {
-    printf("<%s, %d, %d, %d, %s>\n", curr->token_name, curr->row, curr->col,
-           curr->index, curr->type);
+    displayToken(curr);
 
     if (strcmp(curr->type, "KEYWORD") == 0 &&
         isTypeKeyword(curr->token_name) != -1) {
@@ -95,6 +100,8 @@ void compile(const char *input_file) {
       last_type_row = curr->row;
     } else if (strcmp(curr->type, "IDENTIFIER") == 0) {
       Token *peek = getNextToken(temp_fp);
+      displayToken(peek);
+
       int is_function = 0;
 
       if (peek && strcmp(peek->type, "PUNCT") == 0 &&

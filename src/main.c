@@ -7,9 +7,9 @@ int main(int argc, char *argv[]) {
   //   printf("Use as ./compile <input-file-location>\n");
   //   return 0;
   // }
-
+  //
   // char *input_file = argv[1];
-  char input_file[] = "main.c";
+  char input_file[] = "/home/asmitpaul/Documents/Projects/compiler/build/sample.c";
   compile(input_file);
 
   return 0;

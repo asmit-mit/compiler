@@ -209,6 +209,32 @@ Token *isNum(FILE *fp, int *row, int *col) {
   return token_create(buf, start_row, start_col, -1, "NUM");
 }
 
+Token *isLogicalop(FILE *fp, int *row, int *col) {
+  int start_row = *row;
+  int start_col = *col;
+
+  char c = nextChar(fp, row, col);
+  char n = nextChar(fp, row, col);
+
+  char buf[3] = {0};
+
+  if ((c == '&' && n == '&') || (c == '|' && n == '|')) {
+    buf[0] = c;
+    buf[1] = n;
+    return token_create(buf, start_row, start_col, -1, "LOGICAL");
+  }
+
+  ungetChar(n, fp, row, col);
+
+  if (c == '&' || c == '|' || c == '!' || c == '^' || c == '~') {
+    buf[0] = c;
+    return token_create(buf, start_row, start_col, -1, "LOGICAL");
+  }
+
+  ungetChar(c, fp, row, col);
+  return NULL;
+}
+
 Token *isRelop(FILE *fp, int *row, int *col) {
   int start_row = *row;
   int start_col = *col;
@@ -264,14 +290,24 @@ Token *isAddop(FILE *fp, int *row, int *col) {
   int start_col = *col;
 
   char c = nextChar(fp, row, col);
-  char buf[2] = {c, '\0'};
-
-  if (c == '+' || c == '-') {
-    return token_create(buf, start_row, start_col, -1, "ADDOP");
+  if (c != '+' && c != '-') {
+    ungetChar(c, fp, row, col);
+    return NULL;
   }
 
-  ungetChar(c, fp, row, col);
-  return NULL;
+  char n = nextChar(fp, row, col);
+  char buf[3];
+  if (n == c) {
+    buf[0] = c;
+    buf[1] = n;
+    buf[2] = '\0';
+  } else {
+    ungetChar(n, fp, row, col);
+    buf[0] = c;
+    buf[1] = '\0';
+  }
+
+  return token_create(buf, start_row, start_col, -1, "ADDOP");
 }
 
 Token *isMulop(FILE *fp, int *row, int *col) {
@@ -314,6 +350,8 @@ Token *getNextToken(FILE *fp) {
   if ((tok = isStringLiteral(fp, &row, &col)))
     return tok;
   if ((tok = isNum(fp, &row, &col)))
+    return tok;
+  if ((tok = isLogicalop(fp, &row, &col)))
     return tok;
   if ((tok = isRelop(fp, &row, &col)))
     return tok;

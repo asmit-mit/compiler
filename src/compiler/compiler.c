@@ -112,7 +112,7 @@ void compile(const char *input_file) {
                                      last_type, "global"));
       } else if (isBuiltin(curr->token_name)) {
         hashmap_insert(
-            map, symbol_create(curr->token_name, -1, "not in file", "global"));
+            map, symbol_create(curr->token_name, -1, "builtin", "global"));
       }
     }
 

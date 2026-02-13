@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_subdirectory(lib/hashmap)
+add_subdirectory(lib/stack)
 
 add_executable(compile
     src/main.c
@@ -25,3 +26,4 @@ target_include_directories(compile
 )
 
 target_link_libraries(compile PRIVATE hashmap)
+target_link_libraries(compile PRIVATE stack)

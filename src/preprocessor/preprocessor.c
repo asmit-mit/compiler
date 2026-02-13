@@ -62,7 +62,7 @@ void skipCommentsAndDirectives(FILE *fp) {
 
       if (temp == '#') {
         while ((c = fgetc(fp)) != EOF && c != '\n')
-          ;
+          fputc(' ', out);
         fputc('\n', out);
         start_of_line = 1;
         continue;

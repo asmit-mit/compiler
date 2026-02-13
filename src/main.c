@@ -9,7 +9,7 @@ int main(int argc, char *argv[]) {
   // }
   //
   // char *input_file = argv[1];
-  char input_file[] = "/home/asmitpaul/Documents/Projects/compiler/build/sample.c";
+  char input_file[] = "/home/asmitpaul/Projects/compiler/build/sample.c";
   compile(input_file);
 
   return 0;

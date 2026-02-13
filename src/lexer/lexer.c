@@ -1,13 +1,27 @@
 #include "lexer/lexer.h"
+#include "stack.h"
 
-static int prev_row;
+#include <stdlib.h>
+
+typedef struct Position {
+  int row, col;
+} Position;
+
+static Position *getPosition(int row, int col) {
+  Position *pos = (Position *)malloc(sizeof(Position));
+  pos->row = row;
+  pos->col = col;
+  return pos;
+}
+
+Stack *stack;
 
 char nextChar(FILE *fp, int *row, int *col) {
   int c = fgetc(fp);
   if (c == EOF)
     return EOF;
 
-  prev_row = *row;
+  stack_push(stack, getPosition(*row, *col));
 
   if (c == '\n') {
     (*row)++;
@@ -25,19 +39,15 @@ char ungetChar(char c, FILE *fp, int *row, int *col) {
 
   ungetc(c, fp);
 
-  *row = prev_row;
-
-  if (c == '\n') {
-    *col = 1;
-  } else if (c == '\t') {
-    *col -= 2;
-    if (*col < 1)
-      *col = 1;
+  Position *p = (Position *)stack_top(stack);
+  if (p) {
+    *row = p->row;
+    *col = p->col;
   } else {
-    (*col)--;
-    if (*col < 1)
-      *col = 1;
+    *row = 1;
+    *col = 1;
   }
+  stack_pop(stack);
 
   return c;
 }
@@ -326,6 +336,9 @@ Token *isMulop(FILE *fp, int *row, int *col) {
 }
 
 Token *getNextToken(FILE *fp) {
+  if (!stack)
+    stack = stack_create();
+
   static int row = 1, col = 1;
   static int index = 0;
 
@@ -337,8 +350,10 @@ Token *getNextToken(FILE *fp) {
     break;
   }
 
-  if (c == EOF)
+  if (c == EOF) {
     return token_create("EOF", row, col, -1, "EOF");
+    stack_destroy(stack);
+  }
 
   ungetChar(c, fp, &row, &col);
 
